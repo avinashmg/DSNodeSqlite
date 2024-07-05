@@ -57,8 +57,14 @@ app.use(express.json());
 app.use("/file", express.static("file"));
 
 const address_from_username = async (username) => {
-  if (username.indexOf(".")) {
+  if (username.indexOf(".") != -1) {
     return `dv.${username}`;
+  } else {
+    if (username == "avinashmg") {
+      return "dv.avinashmg.com";
+    } else if (username == "johnwick") {
+      return "testuser.avinashmg.com";
+    }
   }
 };
 
@@ -70,7 +76,6 @@ const send_to_followers = async (from, value) => {
     headers: { Accept: "*/*", "Content-Type": "application/json" },
     data: { type: "new post", value: value, from: from },
   };
-
   axios
     .request(options)
     .then(function (response) {})
@@ -82,6 +87,7 @@ const send_to_followers = async (from, value) => {
 app.get("/", async (req, res) => {
   let data = await fs.promises.readFile(`profile.json`, "utf8");
   data = JSON.parse(data);
+  if (data.code != undefined) delete data.code;
   res.json(data);
 });
 
@@ -261,6 +267,13 @@ app.post("/reply", async (req, res) => {
   res.status(200).json({ success: true });
 });
 
+app.get("/feeds/", async (req, res) => {
+  const result = await db.all(
+    `SELECT * FROM signals WHERE (type='new post') ORDER BY id DESC`
+  );
+  res.json(result);
+});
+
 app.post("/signal/", async (req, res) => {
   const type = req.body.type;
   switch (type) {
@@ -287,32 +300,34 @@ app.post("/signal/", async (req, res) => {
 
 const [command] = process.argv.slice(2);
 
+let io;
 const main = async () => {
   if (command == "start") {
-    if (!fs.existsSync("profile.json")) {
-      const code = Math.floor(Math.random() * 899999 + 100000);
-      const data = {
-        code: code,
-      };
-      await fs.promises.writeFile("profile.json", JSON.stringify(data));
-      console.clear();
-      console.log(
-        `-------------------------------------------------------------`
-      );
-      console.log(
-        `------------------- DELTAVERSE SERVER -----------------------`
-      );
-      console.log(
-        `-------------------------------------------------------------`
-      );
-      console.log(` SECRET CODE IS : ${code}`);
-      console.log(`INSTRUCTIONS:`);
-      console.log(
-        `Go to the Deltaverse client and signup using the secret code`
-      );
-    }
-    app.listen(port, () => {
-      console.log(`Instance Started on  port ${port}`);
+    const server = require("http").createServer(app);
+    io = require("socket.io")(server, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+      },
+    });
+
+    // Handle connections
+    io.on("connection", (socket) => {
+      io.emit("chat message", "HEY");
+      console.log("Client connected:", socket.id);
+
+      // Handle chat messages
+      socket.on("chat message", (message) => {
+        console.log("Received message:", message);
+      });
+
+      // Handle disconnections
+      socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
+      });
+    });
+    server.listen(port, () => {
+      console.log(`Example app listening on port ${port}`);
     });
   }
 };
